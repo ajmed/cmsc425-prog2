@@ -6,56 +6,85 @@ public class Granny : MonoBehaviour {
 
 	Transform elvisTransform;
 	Animator animator;
+	GameManager gameManager;
 	CharacterController characterController;
 
-	float gravity = -10.0f;
+	Vector3 newPos = Vector3.zero;
 	float moveSpeed = 3.5f;
-	float rotationSpeed = 180;
-	float rotationSpeedRadians = 80 * (Mathf.PI/180);
+	static float rotationSpeed = 35.0f;
+	float rotationSpeedRadians = rotationSpeed * (Mathf.PI/180);
+
+	Vector3 gravity = new Vector3 (0.0f, -0.15f, 0.0f);
+	float fallingRotation = -1f;
+
+	float followRadius = 7.0f;
+
+	bool grannyFell = false;
 
 	// Use this for initialization
 	void Start () {
 		elvisTransform = GameObject.FindGameObjectWithTag("Elvis").transform;
-		//characterController = GetComponent<CharacterController> ();
+		gameManager = GameObject.FindGameObjectWithTag("GameManager").GetComponent<GameManager>();
+		characterController = GetComponent<CharacterController> ();
 		animator = GetComponent<Animator> ();
 	}
-	
+
+	bool IsGrounded () {
+		var bounds = characterController.bounds;
+		float distToGround = bounds.extents.y + 0.1f;
+		Vector3 down = transform.TransformDirection (Vector3.down);
+		return Physics.Raycast (transform.position, down, distToGround);
+	}
+
 	// Update is called once per frame
 	void Update () {
+		newPos = Vector3.zero;
 
 		float distanceAway = Vector3.Distance (transform.position, elvisTransform.position);
-		if (distanceAway < 1) {
-			// GAME OVER
-			Debug.Log("GAME OVER");
-		} else if (distanceAway < 5) {
+		if (distanceAway < followRadius) {
 			// start moving towards elvis transform
-			float moveStepSize = moveSpeed * Time.deltaTime * (distanceAway / 5);
-			Vector3 newDir = Vector3.MoveTowards (transform.position, elvisTransform.position, moveStepSize);
-			transform.position = newDir;
-			Debug.DrawRay (transform.position, newDir, Color.red);
+			//Vector3 newPos = Vector3.MoveTowards (transform.position, elvisTransform.position, moveStepSize);
+			//newPos -= transform.position;
+			//newPos = transform.TransformDirection (newPos);
+			//Debug.DrawRay (transform.position, newPos, Color.red);
 
-			float rotationStepSize = rotationSpeedRadians * Time.deltaTime;
 			Vector3 targetRot = elvisTransform.position - transform.position;
+			float rotationStepSize = rotationSpeedRadians * Time.deltaTime;
 			Vector3 newRot = Vector3.RotateTowards (transform.forward, targetRot, rotationStepSize, 0.0f);
 			transform.rotation = Quaternion.LookRotation (newRot);
 
-			//characterController.Move (newDir);
+			float moveStepSize = moveSpeed * Time.deltaTime * (distanceAway / followRadius);
+			newPos = moveStepSize * transform.forward;
+
+			// Chase
 			animator.SetBool ("Run", true);
+			animator.SetBool ("Fall", false);
 			animator.SetBool ("Idle", false);
 		} else {
+			// Idle
 			animator.SetBool ("Idle", true);
 			animator.SetBool ("Run", false);
 			animator.SetBool ("Fall", false);
 		}
 
-		bool isGrounded = true;
-		if (!isGrounded) {
-			// make character rotate to simulate falling
-			//characterController.Move(Vector3(gravity * Time.deltaTime));
-
+		if (IsGrounded ()) {
+			if (distanceAway < 1.5) { // GAME OVER
+				gameManager.OnGameLost (null);
+			}
+		} else {
 			animator.SetBool("Fall", true);
 			animator.SetBool("Run", false);
 			animator.SetBool("Idle", false);
+
+			transform.rotation *= Quaternion.Euler(fallingRotation, 0, 0);
+			transform.position += gravity;
+		}
+
+		characterController.Move(newPos);
+
+		if (transform.position.y < -3 && !grannyFell) {
+			grannyFell = true;
+			gameManager.OnGrannyFallen (null);
 		}
 	}
 }
